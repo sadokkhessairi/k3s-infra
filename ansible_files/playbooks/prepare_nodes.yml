@@ -1,0 +1,95 @@
+---
+- name: Prepare Ubuntu for K3s
+
+  hosts: all
+
+  become: yes
+
+
+  tasks:
+
+    - name: Disable swap
+
+      command: swapoff -a
+
+      when: ansible_swaptotal_mb > 0
+
+      changed_when: false
+
+
+    - name: Remove swap from fstab
+
+      replace:
+
+        path: /etc/fstab
+
+        regexp: '^([^#].*?\sswap\s+.*)$'
+
+        replace: '# \1'
+
+
+    - name: Install required packages
+
+      apt:
+
+        name:
+
+          - curl
+
+          - ca-certificates
+
+          - gnupg
+
+          - iptables
+
+        state: present
+
+        update_cache: yes
+
+
+    - name: Ensure kernel modules persist
+
+      copy:
+
+        dest: /etc/modules-load.d/k8s.conf
+
+        content: |
+
+          overlay
+
+          br_netfilter
+
+
+    - name: Load kernel modules
+
+      modprobe:
+
+        name: "{{ item }}"
+
+        state: present
+
+      loop:
+
+        - overlay
+
+        - br_netfilter
+
+
+    - name: Persist sysctl settings
+
+      copy:
+
+        dest: /etc/sysctl.d/k3s.conf
+
+        content: |
+
+          net.bridge.bridge-nf-call-iptables = 1
+
+          net.bridge.bridge-nf-call-ip6tables = 1
+
+          net.ipv4.ip_forward = 1
+
+
+    - name: Apply sysctl
+
+      command: sysctl --system 

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vmagent
+  namespace: monitoring
+  labels:
+    app: vmagent
+spec:
+  selector:
+    matchLabels:
+      app: vmagent
+  template:
+    metadata:
+      labels:
+        app: vmagent
+    spec:
+      serviceAccountName: vmagent
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: vmagent
+        image: victoriametrics/vmagent:v1.97.1
+        args:
+          - -promscrape.config=/config/scrape.yml
+          - -remoteWrite.url=http://victoria-metrics.monitoring.svc:8428/api/v1/write
+          - -remoteWrite.tmpDataPath=/tmp/vmagent
+          - -promscrape.maxScrapeSize=16MB
+        ports:
+        - containerPort: 8429
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: tmpdata
+          mountPath: /tmp/vmagent
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 50m
+          limits:
+            memory: 150Mi
+            cpu: 500m
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      volumes:
+      - name: config
+        configMap:
+          name: vmagent-config
+      - name: tmpdata
+        emptyDir: {}

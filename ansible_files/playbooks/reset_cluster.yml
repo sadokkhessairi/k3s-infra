@@ -1,0 +1,62 @@
+---
+- name: Reset k3s cluster (CONTROL PLANE)
+  hosts: masters
+  become: yes
+  tasks:
+    - name: Stop k3s if running
+      systemd:
+        name: k3s
+        state: stopped
+      ignore_errors: true
+
+    - name: Uninstall k3s
+      command: /usr/local/bin/k3s-uninstall.sh
+      ignore_errors: true
+
+    - name: Remove k3s state
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/rancher
+        - /var/lib/rancher
+        - /var/lib/kubelet
+        - /etc/systemd/system/k3s.service
+
+    - name: Remove CNI interfaces
+      command: ip link delete {{ item }}
+      loop:
+        - cni0
+        - flannel.1
+      ignore_errors: true
+
+- name: Reset k3s workers
+  hosts: workers
+  become: yes
+  tasks:
+    - name: Stop k3s-agent
+      systemd:
+        name: k3s-agent
+        state: stopped
+      ignore_errors: true
+
+    - name: Uninstall k3s-agent
+      command: /usr/local/bin/k3s-agent-uninstall.sh
+      ignore_errors: true
+
+    - name: Remove worker state
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/rancher
+        - /var/lib/rancher
+        - /var/lib/kubelet
+        - /etc/systemd/system/k3s-agent.service
+
+    - name: Remove CNI interfaces
+      command: ip link delete {{ item }}
+      loop:
+        - cni0
+        - flannel.1
+      ignore_errors: true

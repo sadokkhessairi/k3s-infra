@@ -1,0 +1,369 @@
+---
+# ========================================
+# PLAY 1: Configure Load Balancer
+# ========================================
+- name: Setup HAProxy Load Balancer
+  hosts: loadbalancer
+  become: yes
+  vars:
+    lb_ip: "{{ hostvars[groups['loadbalancer'][0]].ansible_host }}"
+  tasks:
+    - name: Install HAProxy
+      apt:
+        name: haproxy
+        state: present
+        update_cache: yes
+
+    - name: Configure HAProxy for k3s
+      copy:
+        dest: /etc/haproxy/haproxy.cfg
+        content: |
+          global
+              log /dev/log local0
+              log /dev/log local1 notice
+              chroot /var/lib/haproxy
+              stats socket /run/haproxy/admin.sock mode 660 level admin
+              stats timeout 30s
+              user haproxy
+              group haproxy
+              daemon
+
+          defaults
+              log     global
+              mode    tcp
+              option  tcplog
+              option  dontlognull
+              timeout connect 5000
+              timeout client  50000
+              timeout server  50000
+
+          frontend k3s_api
+              bind *:6443
+              mode tcp
+              option tcplog
+              default_backend k3s_masters
+
+          backend k3s_masters
+              mode tcp
+              balance roundrobin
+              option tcp-check
+          {% for host in groups['k3s_bootstrap'] + groups['masters'] %}
+              server {{ host }} {{ hostvars[host].ansible_host }}:6443 check fall 3 rise 2
+          {% endfor %}
+
+    - name: Enable and restart HAProxy
+      systemd:
+        name: haproxy
+        state: restarted
+        enabled: yes
+
+    - name: Verify HAProxy is listening
+      wait_for:
+        port: 6443
+        delay: 2
+        timeout: 30
+
+# ========================================
+# PLAY 2: Prepare all k3s nodes
+# ========================================
+- name: Prepare OS for k3s
+  hosts: k3s_cluster
+  become: yes
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - ca-certificates
+          - gnupg
+          - iptables
+          - open-iscsi
+          - nfs-common
+        state: present
+        update_cache: yes
+
+    - name: Enable and start iSCSI (for Longhorn)
+      systemd:
+        name: iscsid
+        state: started
+        enabled: yes
+
+    - name: Verify Longhorn disk is mounted (workers only)
+      shell: df -h /var/lib/longhorn
+      register: longhorn_check
+      when: "'workers' in group_names"
+      changed_when: false
+      failed_when: false
+
+    - name: Display Longhorn disk status
+      debug:
+        msg: "{{ longhorn_check.stdout_lines }}"
+      when: "'workers' in group_names and longhorn_check.rc == 0"
+
+# ========================================
+# PLAY 3: Bootstrap first master
+# ========================================
+- name: Bootstrap k3s control plane
+  hosts: k3s_bootstrap
+  become: yes
+  vars:
+    cluster_token: "{{ lookup('password', '/tmp/.k3s_cluster_token length=64 chars=ascii_letters,digits') }}"
+    lb_ip: "{{ hostvars[groups['loadbalancer'][0]].ansible_host }}"
+  tasks:
+    - name: Create k3s config directory
+      file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: '0755'
+
+    - name: Create k3s config file
+      copy:
+        dest: /etc/rancher/k3s/config.yaml
+        content: |
+          cluster-init: true
+          write-kubeconfig-mode: "0644"
+          tls-san:
+            - "{{ lb_ip }}"
+          {% for host in groups['k3s_bootstrap'] + groups['masters'] %}
+            - "{{ hostvars[host].ansible_host }}"
+          {% endfor %}
+          disable:
+            - traefik
+          node-ip: "{{ ansible_host }}"
+          flannel-backend: vxlan
+
+    - name: Install k3s server (cluster-init)
+      shell: |
+        curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION={{ k3s_version }} \
+        K3S_TOKEN={{ cluster_token }} sh -s - server
+      args:
+        creates: /etc/systemd/system/k3s.service
+
+    - name: Wait for Kubernetes API on bootstrap node
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: 6443
+        delay: 10
+        timeout: 300
+
+    - name: Wait for node to be ready
+      shell: kubectl get nodes {{ ansible_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: 30
+      delay: 10
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Read node token
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: master_token
+
+    - name: Display bootstrap status
+      debug:
+        msg: "Bootstrap master {{ ansible_hostname }} is ready"
+
+# ========================================
+# PLAY 4: Join remaining masters
+# ========================================
+- name: Join remaining masters
+  hosts: masters
+  become: yes
+  serial: 1
+  vars:
+    api_server: "https://{{ hostvars[groups['k3s_bootstrap'][0]].ansible_host }}:6443"
+    token: "{{ hostvars[groups['k3s_bootstrap'][0]].master_token.content | b64decode | trim }}"
+    lb_ip: "{{ hostvars[groups['loadbalancer'][0]].ansible_host }}"
+  tasks:
+    - name: Check if k3s is already installed
+      stat:
+        path: /usr/local/bin/k3s
+      register: k3s_installed
+
+    - name: Stop k3s if already running
+      systemd:
+        name: k3s
+        state: stopped
+      when: k3s_installed.stat.exists
+      ignore_errors: yes
+
+    - name: Clean previous k3s state
+      shell: |
+        /usr/local/bin/k3s-killall.sh || true
+        rm -rf /var/lib/rancher/k3s/server/db
+        rm -rf /var/lib/rancher/k3s/server/tls
+      when: k3s_installed.stat.exists
+      ignore_errors: yes
+
+    - name: Create k3s config directory
+      file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: '0755'
+
+    - name: Create k3s config file
+      copy:
+        dest: /etc/rancher/k3s/config.yaml
+        content: |
+          server: {{ api_server }}
+          write-kubeconfig-mode: "0644"
+          tls-san:
+            - "{{ lb_ip }}"
+          {% for host in groups['k3s_bootstrap'] + groups['masters'] %}
+            - "{{ hostvars[host].ansible_host }}"
+          {% endfor %}
+          node-ip: "{{ ansible_host }}"
+
+    - name: Join master to control plane
+      shell: |
+        curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION={{ k3s_version }} \
+        K3S_TOKEN="{{ token }}" sh -s - server
+      args:
+        creates: /etc/systemd/system/k3s.service
+
+    - name: Ensure k3s service is started
+      systemd:
+        name: k3s
+        state: started
+        enabled: yes
+
+    - name: Wait for node to appear in cluster
+      shell: kubectl get nodes {{ ansible_hostname }}
+      register: node_joined
+      until: node_joined.rc == 0
+      retries: 30
+      delay: 10
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      delegate_to: "{{ groups['k3s_bootstrap'][0] }}"
+
+    - name: Wait for node to be ready
+      shell: kubectl get nodes {{ ansible_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: 30
+      delay: 10
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      delegate_to: "{{ groups['k3s_bootstrap'][0] }}"
+
+# ========================================
+# PLAY 5: Join worker nodes (via LB)
+# ========================================
+- name: Join worker nodes
+  hosts: workers
+  become: yes
+  vars:
+    api_server: "https://{{ hostvars[groups['loadbalancer'][0]].ansible_host }}:6443"
+    token: "{{ hostvars[groups['k3s_bootstrap'][0]].master_token.content | b64decode | trim }}"
+  tasks:
+    - name: Join worker to cluster via load balancer
+      shell: |
+        curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION={{ k3s_version }} \
+        K3S_URL={{ api_server }} \
+        K3S_TOKEN={{ token }} sh -s - agent \
+        --node-ip={{ ansible_host }}
+      args:
+        creates: /etc/systemd/system/k3s-agent.service
+
+    - name: Ensure k3s-agent service is started
+      systemd:
+        name: k3s-agent
+        state: started
+        enabled: yes
+
+    - name: Wait for worker to join
+      shell: kubectl get nodes {{ ansible_hostname }}
+      register: node_joined
+      until: node_joined.rc == 0
+      retries: 30
+      delay: 10
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      delegate_to: "{{ groups['k3s_bootstrap'][0] }}"
+
+# ========================================
+# PLAY 6: Configure kubeconfig
+# ========================================
+- name: Configure kubeconfig access
+  hosts: k3s_bootstrap
+  become: yes
+  vars:
+    lb_ip: "{{ hostvars[groups['loadbalancer'][0]].ansible_host }}"
+  tasks:
+    - name: Create .kube directory
+      file:
+        path: "/home/{{ ansible_user }}/.kube"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Copy kubeconfig to user home
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "/home/{{ ansible_user }}/.kube/config"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'
+        remote_src: yes
+
+    - name: Update kubeconfig to use load balancer
+      replace:
+        path: "/home/{{ ansible_user }}/.kube/config"
+        regexp: '127.0.0.1'
+        replace: "{{ lb_ip }}"
+
+# ========================================
+# PLAY 7: Verify cluster health
+# ========================================
+- name: Verify cluster health
+  hosts: k3s_bootstrap
+  become: yes
+  tasks:
+    - name: Get cluster info
+      command: kubectl cluster-info
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: cluster_info
+
+    - name: Display cluster info
+      debug:
+        var: cluster_info.stdout_lines
+
+    - name: Get all nodes
+      command: kubectl get nodes -o wide
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: all_nodes
+
+    - name: Display all nodes
+      debug:
+        var: all_nodes.stdout_lines
+
+    - name: Verify all nodes are Ready
+      shell: kubectl get nodes --no-headers | grep -v Ready | wc -l
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: not_ready_count
+      failed_when: not_ready_count.stdout != "0"
+
+    - name: Verify etcd cluster health
+      shell: kubectl get nodes -o wide
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: etcd_status
+
+    - name: Display success message
+      debug:
+        msg:
+          - "✅ k3s HA cluster deployed successfully!"
+          - "📊 Total nodes: {{ groups['k3s_bootstrap'] | length + groups['masters'] | length + groups['workers'] | length }}"
+          - "🎛️ Control plane: {{ groups['k3s_bootstrap'] | length + groups['masters'] | length }} nodes"
+          - "💼 Workers: {{ groups['workers'] | length }} nodes"
+          - "⚖️ Load Balancer: {{ hostvars[groups['loadbalancer'][0]].ansible_host }}"
+          - "🔗 API Endpoint: https://{{ hostvars[groups['loadbalancer'][0]].ansible_host }}:6443"

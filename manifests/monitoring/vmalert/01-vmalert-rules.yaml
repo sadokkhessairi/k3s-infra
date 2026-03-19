@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vmalert-rules
+  namespace: monitoring
+data:
+  alerts.yaml: |
+    groups:
+    - name: node_alerts
+      interval: 30s
+      rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (node) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on node {{ $labels.node }}"
+          description: "CPU usage is {{ $value | printf \"%.2f\" }}% on node {{ $labels.node }}"
+      
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on node {{ $labels.node }}"
+          description: "Memory usage is {{ $value | printf \"%.2f\" }}% on node {{ $labels.node }}"
+      
+      # High disk usage
+      - alert: HighDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage on node {{ $labels.node }}"
+          description: "Disk usage is {{ $value | printf \"%.2f\" }}% on node {{ $labels.node }}"
+      
+      # Node down
+      - alert: NodeDown
+        expr: up{job="kubernetes-nodes"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node {{ $labels.node }} is down"
+          description: "Node {{ $labels.node }} has been down for more than 1 minute"
+    
+    - name: pod_alerts
+      interval: 30s
+      rules:
+      # Pod CrashLoopBackOff
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently"
+      
+      # Pod not ready
+      - alert: PodNotReady
+        expr: kube_pod_status_phase{phase!~"Running|Succeeded"} > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.pod }} not ready"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been in {{ $labels.phase }} state for more than 10 minutes"
+      
+      # Container OOMKilled
+      - alert: ContainerOOMKilled
+        expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.container }} OOMKilled"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} was killed due to out of memory"
+    
+    - name: storage_alerts
+      interval: 30s
+      rules:
+      # PVC almost full
+      - alert: PVCAlmostFull
+        expr: (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PVC {{ $labels.persistentvolumeclaim }} almost full"
+          description: "PVC {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }} is {{ $value | printf \"%.2f\" }}% full"

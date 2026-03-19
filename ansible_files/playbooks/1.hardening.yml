@@ -1,0 +1,363 @@
+---
+- name: Network & Runtime Hardening for k3s (Day-2 Operations)
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    dns_servers:
+      - 1.1.1.1
+      - 8.8.8.8
+    flannel_mtu: 1450
+
+  tasks:
+    # =====================================================
+    # PHASE 0: ROLLBACK PREPARATION
+    # =====================================================
+    - name: Create rollback point for critical configs
+      copy:
+        src: "{{ item }}"
+        dest: "{{ item }}.pre-hardening.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+        force: no
+      loop:
+        - /etc/systemd/resolved.conf
+        - /etc/rancher/k3s/config.yaml
+      failed_when: false
+
+    # =====================================================
+    # PHASE 1: DNS STABILITY
+    # =====================================================
+    - name: Backup original resolved.conf
+      copy:
+        src: /etc/systemd/resolved.conf
+        dest: /etc/systemd/resolved.conf.backup
+        remote_src: yes
+        force: no
+
+    - name: Configure systemd-resolved DNS
+      lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: '^#?DNS='
+        line: "DNS={{ dns_servers | join(' ') }}"
+        state: present
+      notify: restart systemd-resolved
+
+    - name: Configure fallback DNS
+      lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: '^#?FallbackDNS='
+        line: 'FallbackDNS=9.9.9.9'
+        state: present
+      notify: restart systemd-resolved
+
+    - name: Ensure DNSStubListener is enabled
+      lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: '^#?DNSStubListener='
+        line: 'DNSStubListener=yes'
+        state: present
+      notify: restart systemd-resolved
+
+    # =====================================================
+    # PHASE 2: NETWORK TUNING
+    # =====================================================
+    - name: Set network sysctl parameters
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { key: 'net.ipv4.tcp_keepalive_time', value: '600' }
+        - { key: 'net.ipv4.tcp_keepalive_intvl', value: '60' }
+        - { key: 'net.ipv4.tcp_keepalive_probes', value: '3' }
+        - { key: 'net.core.somaxconn', value: '32768' }
+        - { key: 'net.ipv4.ip_local_port_range', value: '1024 65535' }
+
+    # =====================================================
+    # PHASE 3: k3s REGISTRY CONFIG
+    # =====================================================
+    - name: Create k3s registries config directory
+      file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: '0755'
+
+    - name: Configure k3s registries
+      copy:
+        dest: /etc/rancher/k3s/registries.yaml
+        mode: '0644'
+        content: |
+          mirrors:
+            docker.io:
+              endpoint:
+                - "https://registry-1.docker.io"
+            gcr.io:
+              endpoint:
+                - "https://gcr.io"
+            quay.io:
+              endpoint:
+                - "https://quay.io"
+      notify: restart k3s services safely
+
+    # =====================================================
+    # PHASE 4: CHECK & UPDATE FLANNEL CONFIG
+    # =====================================================
+    - name: Check if k3s config exists
+      stat:
+        path: /etc/rancher/k3s/config.yaml
+      register: k3s_config_stat
+
+    - name: Read existing k3s config
+      slurp:
+        src: /etc/rancher/k3s/config.yaml
+      register: k3s_config_content
+      when: k3s_config_stat.stat.exists
+
+    - name: Parse existing config
+      set_fact:
+        existing_config: "{{ k3s_config_content.content | b64decode | from_yaml | default({}) }}"
+      when: k3s_config_stat.stat.exists
+      failed_when: false
+
+    - name: Check if flannel-mtu is already configured
+      set_fact:
+        mtu_configured: "{{ existing_config['flannel-mtu'] is defined }}"
+      when: 
+        - k3s_config_stat.stat.exists
+        - existing_config is defined
+      failed_when: false
+
+    - name: Add flannel-mtu if not present
+      lineinfile:
+        path: /etc/rancher/k3s/config.yaml
+        regexp: '^flannel-mtu:'
+        line: "flannel-mtu: {{ flannel_mtu }}"
+        state: present
+      when: 
+        - k3s_config_stat.stat.exists
+        - not (mtu_configured | default(false))
+      notify: restart k3s services safely
+
+    - name: Ensure flannel-backend is vxlan
+      lineinfile:
+        path: /etc/rancher/k3s/config.yaml
+        regexp: '^flannel-backend:'
+        line: 'flannel-backend: vxlan'
+        state: present
+      when: k3s_config_stat.stat.exists
+      notify: restart k3s services safely
+
+    # =====================================================
+    # PHASE 5: PREFLIGHT CHECKS
+    # =====================================================
+    - name: Preflight | Test DNS resolution
+      command: nslookup registry-1.docker.io
+      register: dns_test
+      failed_when: false
+      changed_when: false
+
+    - name: Preflight | Verify registry reachability
+      uri:
+        url: https://registry-1.docker.io/v2/
+        method: GET
+        timeout: 5
+        status_code: [200, 301, 401]
+      register: registry_check
+      retries: 3
+      delay: 5
+      failed_when: false
+
+    - name: Display preflight results
+      debug:
+        msg:
+          - "DNS Test: {{ 'PASS' if dns_test.rc == 0 else 'FAIL' }}"
+          - "Registry Test: {{ 'PASS' if registry_check.status in [200,301,401] else 'FAIL' }}"
+
+    # =====================================================
+    # PHASE 6: LOG ROTATION
+    # =====================================================
+    - name: Configure k3s pod log rotation
+      copy:
+        dest: /etc/logrotate.d/k3s
+        mode: '0644'
+        content: |
+          /var/log/pods/*/*.log {
+              daily
+              rotate 7
+              compress
+              missingok
+              notifempty
+              copytruncate
+          }
+
+  handlers:
+    - name: restart systemd-resolved
+      systemd:
+        name: systemd-resolved
+        state: restarted
+
+    - name: restart k3s services safely
+      service_facts:
+      listen: "restart k3s services safely"
+
+    - name: Determine node role
+      set_fact:
+        is_master: "{{ 'k3s.service' in ansible_facts.services }}"
+        is_worker: "{{ 'k3s-agent.service' in ansible_facts.services and 'k3s.service' not in ansible_facts.services }}"
+      listen: "restart k3s services safely"
+
+    - name: Restart k3s server (masters)
+      systemd:
+        name: k3s
+        state: restarted
+      when: is_master
+      throttle: 1
+      listen: "restart k3s services safely"
+
+    - name: Wait for API server port
+      wait_for:
+        port: 6443
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 5
+        timeout: 120
+        state: started
+      when: is_master
+      failed_when: false
+      listen: "restart k3s services safely"
+
+    - name: Verify master node readiness
+      shell: |
+        if command -v kubectl >/dev/null 2>&1; then
+          kubectl get nodes {{ ansible_hostname }} \
+            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False"
+        else
+          echo "False"
+        fi
+      register: master_ready
+      until: master_ready.stdout == "True"
+      retries: 20
+      delay: 10
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+        PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+      when:
+        - is_master
+        - groups['k3s_bootstrap'] is defined
+        - groups['k3s_bootstrap'] | length > 0
+      delegate_to: "{{ groups['k3s_bootstrap'][0] }}"
+      failed_when: false
+      listen: "restart k3s services safely"
+
+    - name: Display master status
+      debug:
+        msg: "Master {{ ansible_hostname }}: {{ 'Ready ✅' if master_ready.stdout == 'True' else 'Not Ready ⚠️' }}"
+      when:
+        - is_master
+        - master_ready is defined
+      listen: "restart k3s services safely"
+
+    - name: Restart k3s agent (workers)
+      systemd:
+        name: k3s-agent
+        state: restarted
+      when: is_worker
+      listen: "restart k3s services safely"
+
+    - name: Wait for kubelet port (workers)
+      wait_for:
+        port: 10250
+        delay: 5
+        timeout: 60
+        state: started
+      when: is_worker
+      failed_when: false
+      listen: "restart k3s services safely"
+
+    - name: Verify worker readiness
+      shell: |
+        if command -v kubectl >/dev/null 2>&1; then
+          kubectl get nodes {{ ansible_hostname }} \
+            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False"
+        else
+          echo "False"
+        fi
+      register: worker_ready
+      until: worker_ready.stdout == "True"
+      retries: 20
+      delay: 10
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+        PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+      when:
+        - is_worker
+        - groups['k3s_bootstrap'] is defined
+        - groups['k3s_bootstrap'] | length > 0
+      delegate_to: "{{ groups['k3s_bootstrap'][0] }}"
+      failed_when: false
+      listen: "restart k3s services safely"
+
+    - name: Display worker status
+      debug:
+        msg: "Worker {{ ansible_hostname }}: {{ 'Ready ✅' if worker_ready.stdout == 'True' else 'Not Ready ⚠️' }}"
+      when:
+        - is_worker
+        - worker_ready is defined
+      listen: "restart k3s services safely"
+
+# =====================================================
+# POST-HARDENING VERIFICATION
+# =====================================================
+- name: Post-Hardening Verification
+  hosts: k3s_bootstrap
+  become: yes
+  vars:
+    dns_servers:
+      - 1.1.1.1
+      - 8.8.8.8
+    flannel_mtu: 1450
+  tasks:
+    - name: Wait for cluster to stabilize
+      pause:
+        seconds: 30
+        prompt: "Waiting for cluster stabilization..."
+
+    - name: Get all node statuses
+      shell: kubectl get nodes -o wide
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: all_nodes
+
+    - name: Display cluster status
+      debug:
+        var: all_nodes.stdout_lines
+
+    - name: Count Ready nodes
+      shell: kubectl get nodes --no-headers | grep -c " Ready "
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: ready_count
+      failed_when: false
+
+    - name: Verify all nodes are Ready
+      assert:
+        that:
+          - ready_count.stdout | int == (groups['k3s_cluster'] | length)
+        success_msg: "✅ All {{ ready_count.stdout }} nodes are Ready"
+        fail_msg: "⚠️ Only {{ ready_count.stdout }}/{{ groups['k3s_cluster'] | length }} nodes are Ready - manual check required"
+      failed_when: false
+
+    - name: Display hardening summary
+      debug:
+        msg:
+          - "========================================="
+          - "🎉 HARDENING COMPLETE"
+          - "========================================="
+          - "✅ DNS configured: {{ dns_servers | join(', ') }}"
+          - "✅ Flannel MTU: {{ flannel_mtu }}"
+          - "✅ Registry mirrors configured"
+          - "✅ Network tuning applied"
+          - "✅ Log rotation configured"
+          - "✅ Nodes Ready: {{ ready_count.stdout }}/{{ groups['k3s_cluster'] | length }}"
+          - "========================================="

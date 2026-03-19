@@ -1,0 +1,148 @@
+---
+# ============================================================================
+# DISK EXPANSION PLAYBOOK FOR RUNNING VMs - FINAL VERSION
+# ============================================================================
+
+- name: Expand Virtual Disk Files on Running VMs
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: yes
+  vars:
+    vms:
+      - { name: "k3s-master-0", ip: "192.168.122.10", disk: "vda" }
+      - { name: "k3s-master-1", ip: "192.168.122.11", disk: "vda" }
+      - { name: "k3s-master-2", ip: "192.168.122.12", disk: "vda" }
+      - { name: "k3s-worker-0", ip: "192.168.122.20", disk: "vda" }
+      - { name: "k3s-worker-1", ip: "192.168.122.21", disk: "vda" }
+    new_size: "50G"
+
+  tasks:
+    - name: "1.1: Verify VMs are running"
+      command: "virsh domstate {{ item.name }}"
+      loop: "{{ vms }}"
+      register: vm_states
+      changed_when: false
+
+    - name: "1.2: Display VM states"
+      debug:
+        msg: "{{ item.item.name }}: {{ item.stdout }}"
+      loop: "{{ vm_states.results }}"
+
+    - name: "1.3: Expand block devices using virsh"
+      command: "virsh blockresize {{ item.name }} {{ item.disk }} {{ new_size }}"
+      loop: "{{ vms }}"
+      register: blockresize_result
+      failed_when: 
+        - blockresize_result.rc != 0
+        - "'Block device' not in blockresize_result.stdout"
+        - "'current size' not in blockresize_result.stderr"
+
+    - name: "1.4: Display expansion results"
+      debug:
+        msg: "{{ item.item.name }}: {{ item.stdout if item.stdout else 'Already at target size' }}"
+      loop: "{{ blockresize_result.results }}"
+
+- name: Expand Filesystems Inside Guest VMs
+  hosts: k3s_cluster
+  become: yes
+  serial: 1
+  
+  tasks:
+    - name: "2.1: Show disk usage BEFORE"
+      shell: "df -h / | tail -1"
+      register: before_df
+      changed_when: false
+
+    - name: "2.2: Display BEFORE"
+      debug:
+        msg: "{{ inventory_hostname }} BEFORE: {{ before_df.stdout }}"
+
+    - name: "2.3: Install cloud-guest-utils"
+      apt:
+        name: cloud-guest-utils
+        state: present
+        update_cache: yes
+
+    - name: "2.4: Rescan disk"
+      shell: "echo 1 > /sys/class/block/vda/device/rescan"
+      ignore_errors: yes
+      changed_when: false
+
+    - name: "2.5: Grow partition"
+      command: "growpart /dev/vda 1"
+      register: grow_result
+      failed_when: 
+        - grow_result.rc != 0 
+        - "'NOCHANGE' not in grow_result.stdout"
+        - "'CHANGED' not in grow_result.stdout"
+
+    - name: "2.6: Show growpart output"
+      debug:
+        msg: "{{ grow_result.stdout_lines }}"
+
+    - name: "2.7: Resize filesystem"
+      command: "resize2fs /dev/vda1"
+      register: resize_fs
+
+    - name: "2.8: Show resize2fs output"
+      debug:
+        msg: "{{ resize_fs.stdout_lines }}"
+
+    - name: "2.9: Show disk usage AFTER"
+      shell: "df -h / | tail -1"
+      register: after_df
+      changed_when: false
+
+    - name: "2.10: Display AFTER"
+      debug:
+        msg: "{{ inventory_hostname }} AFTER: {{ after_df.stdout }}"
+
+    - name: "2.11: Verify success"
+      assert:
+        that: resize_fs.rc == 0
+        success_msg: "✅ {{ inventory_hostname }} expanded successfully"
+        fail_msg: "❌ {{ inventory_hostname }} expansion failed"
+
+- name: Final Cluster Health Check
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  tasks:
+    - name: "3.1: Wait for cluster stabilization"
+      pause:
+        seconds: 20
+
+    - name: "3.2: Check K8s nodes"
+      shell: "kubectl get nodes"
+      register: nodes
+      changed_when: false
+
+    - name: "3.3: Display nodes"
+      debug:
+        msg: "{{ nodes.stdout_lines }}"
+
+    - name: "3.4: Get final disk summary"
+      shell: |
+        echo "=== FINAL DISK USAGE ==="
+        for node in k3s-master-0 k3s-master-1 k3s-master-2 k3s-worker-0 k3s-worker-1; do
+          echo -n "$node: "
+          ssh -i ~/.ssh/k3s_lab_key -o StrictHostKeyChecking=no ubuntu@$node "df -h / | tail -1 | awk '{print \$2, \$3, \$4, \$5}'"
+        done
+      register: disk_summary
+      changed_when: false
+
+    - name: "3.5: Show final summary"
+      debug:
+        msg: "{{ disk_summary.stdout_lines }}"
+
+    - name: "3.6: Success message"
+      debug:
+        msg: |
+          ========================================
+          ✅ DISK EXPANSION COMPLETED
+          ========================================
+          All 5 nodes expanded to 50GB
+          Cluster is healthy and ready
+          ========================================

@@ -1,0 +1,93 @@
+#cloud-config
+
+preserve_hostname: false
+
+users:
+  - name: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: users, admin, sudo
+    shell: /bin/bash
+    lock_passwd: false
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+chpasswd:
+  list: |
+    ubuntu:ubuntu
+  expire: false
+
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+  - curl
+  - wget
+  - vim
+  - net-tools
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - open-iscsi          # For Longhorn
+  - nfs-common          # For NFS storage
+  - jq                  # Useful for scripts
+  - util-linux          # For disk management
+
+network:
+  version: 2
+  ethernets:
+    ens3:
+      dhcp4: true
+      dhcp6: false
+
+swap:
+  filename: /swap.img
+  size: 0
+
+bootcmd:
+  - [ cloud-init-per, once, swapoff, swapoff, -a ]
+
+runcmd:
+  # Disable swap
+  - swapoff -a
+  - sed -i '/ swap / s/^/#/' /etc/fstab
+  
+  # Enable services
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+  - systemctl enable iscsid
+  - systemctl start iscsid
+  
+  # Kernel modules for k8s
+  - modprobe overlay
+  - modprobe br_netfilter
+  - echo "overlay" >> /etc/modules-load.d/k8s.conf
+  - echo "br_netfilter" >> /etc/modules-load.d/k8s.conf
+  
+  # Sysctl for k8s
+  - echo "net.bridge.bridge-nf-call-iptables = 1" >> /etc/sysctl.conf
+  - echo "net.bridge.bridge-nf-call-ip6tables = 1" >> /etc/sysctl.conf
+  - echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+  - echo "fs.inotify.max_user_instances = 8192" >> /etc/sysctl.conf
+  - echo "fs.inotify.max_user_watches = 524288" >> /etc/sysctl.conf
+  - sysctl -p
+  
+  # Prepare additional disk for Longhorn if exists (will be /dev/vdb)
+  - |
+    if [ -b /dev/vdb ]; then
+      # Format the disk as ext4
+      mkfs.ext4 -F /dev/vdb
+      # Create mount point
+      mkdir -p /var/lib/longhorn
+      # Get UUID
+      UUID=$(blkid -s UUID -o value /dev/vdb)
+      # Add to fstab
+      echo "UUID=$UUID /var/lib/longhorn ext4 defaults 0 2" >> /etc/fstab
+      # Mount
+      mount -a
+      # Set permissions
+      chmod 755 /var/lib/longhorn
+    fi
+
+timezone: Africa/Tunis
+
+final_message: "Cloud-init completed in $UPTIME seconds"
