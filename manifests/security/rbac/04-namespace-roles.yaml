@@ -1,0 +1,126 @@
+# ============================================
+# Role for Grafana (monitoring namespace only)
+# Purpose: Read ConfigMaps for dashboard provisioning
+# Why Role (not ClusterRole): Only needs monitoring namespace
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-config-reader
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - secrets
+    verbs: ["get", "list", "watch"]
+
+---
+# ============================================
+# Role for Loki (monitoring namespace only)
+# Purpose: Minimal permissions for operation
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: loki-reader
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+    verbs: ["get", "list"]
+
+---
+# ============================================
+# Role for VictoriaMetrics
+# Purpose: Read own ConfigMaps
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: victoria-metrics-reader
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+    verbs: ["get", "list", "watch"]
+
+---
+# ============================================
+# Role for vmalert
+# Purpose: Read alert rules from ConfigMaps
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vmalert-reader
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - pods
+    verbs: ["get", "list", "watch"]
+
+---
+# ============================================
+# Role for Alertmanager
+# Purpose: Read configuration
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: alertmanager-reader
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - secrets
+    verbs: ["get", "list", "watch"]
+
+---
+# ============================================
+# Role for Sealed Secrets Key Management
+# Purpose: Read/write encryption keys in security namespace
+# Why Role (not ClusterRole): Keys only stored in security namespace
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sealed-secrets-key-admin
+  namespace: security
+  labels:
+    app.kubernetes.io/name: sealed-secrets
+rules:
+  # Full access to secrets (for encryption keys)
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - watch
+  
+  # Read service accounts
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    verbs:
+      - get
+  
+  # Create service account tokens
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts/token
+    verbs:
+      - create

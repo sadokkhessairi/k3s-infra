@@ -1,0 +1,108 @@
+# ============================================
+# Bind Grafana to its Role
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-config-reader-binding
+  namespace: monitoring
+subjects:
+  - kind: ServiceAccount
+    name: grafana
+    namespace: monitoring
+roleRef:
+  kind: Role
+  name: grafana-config-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ============================================
+# Bind Loki to its Role
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: loki-reader-binding
+  namespace: monitoring
+subjects:
+  - kind: ServiceAccount
+    name: loki
+    namespace: monitoring
+roleRef:
+  kind: Role
+  name: loki-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ============================================
+# Bind VictoriaMetrics to its Role
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: victoria-metrics-reader-binding
+  namespace: monitoring
+subjects:
+  - kind: ServiceAccount
+    name: victoria-metrics
+    namespace: monitoring
+roleRef:
+  kind: Role
+  name: victoria-metrics-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ============================================
+# Bind vmalert to its Role
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vmalert-reader-binding
+  namespace: monitoring
+subjects:
+  - kind: ServiceAccount
+    name: vmalert
+    namespace: monitoring
+roleRef:
+  kind: Role
+  name: vmalert-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ============================================
+# Bind Alertmanager to its Role
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alertmanager-reader-binding
+  namespace: monitoring
+subjects:
+  - kind: ServiceAccount
+    name: alertmanager
+    namespace: monitoring
+roleRef:
+  kind: Role
+  name: alertmanager-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ============================================
+# Bind Sealed Secrets Controller to Key Admin Role
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sealed-secrets-controller
+  namespace: security
+  labels:
+    app.kubernetes.io/name: sealed-secrets
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sealed-secrets-key-admin
+subjects:
+  - kind: ServiceAccount
+    name: sealed-secrets-controller
+    namespace: security

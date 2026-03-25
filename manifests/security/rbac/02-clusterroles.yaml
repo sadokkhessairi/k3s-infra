@@ -1,0 +1,221 @@
+# ============================================
+# ClusterRole for vmagent
+# Purpose: Scrape metrics from all namespaces
+# Why ClusterRole: Needs to discover pods/services cluster-wide
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vmagent-scraper
+rules:
+  # Discover pods to scrape
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/metrics
+      - nodes/stats
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  
+  # Read non-resource URLs (metrics endpoints)
+  - nonResourceURLs:
+      - /metrics
+      - /metrics/cadvisor
+    verbs: ["get"]
+
+---
+# ============================================
+# ClusterRole for Promtail
+# Purpose: Collect logs from all pods
+# Why ClusterRole: Needs to read pod metadata cluster-wide
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: promtail-reader
+rules:
+  # Read pod metadata to enrich logs
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+
+---
+# ============================================
+# ClusterRole for kube-state-metrics
+# Purpose: Read cluster state for metrics
+# Why ClusterRole: Monitors all Kubernetes resources
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics-reader
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - secrets
+      - nodes
+      - pods
+      - services
+      - resourcequotas
+      - replicationcontrollers
+      - limitranges
+      - persistentvolumeclaims
+      - persistentvolumes
+      - namespaces
+      - endpoints
+    verbs: ["list", "watch"]
+  
+  - apiGroups: ["apps"]
+    resources:
+      - statefulsets
+      - daemonsets
+      - deployments
+      - replicasets
+    verbs: ["list", "watch"]
+  
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+      - jobs
+    verbs: ["list", "watch"]
+  
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["list", "watch"]
+  
+  - apiGroups: ["policy"]
+    resources:
+      - poddisruptionbudgets
+    verbs: ["list", "watch"]
+  
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+      - volumeattachments
+    verbs: ["list", "watch"]
+  
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs: ["list", "watch"]
+
+---
+# ============================================
+# ClusterRole for Sealed Secrets Controller
+# Purpose: Decrypt sealed secrets into regular secrets
+# Why ClusterRole: Manages secrets in ALL namespaces
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sealed-secrets-controller
+  labels:
+    app.kubernetes.io/name: sealed-secrets
+rules:
+  # Read/write sealed-secrets CRD (custom resource)
+  - apiGroups:
+      - bitnami.com
+    resources:
+      - sealedsecrets
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  
+  # Update sealed-secrets status field
+  - apiGroups:
+      - bitnami.com
+    resources:
+      - sealedsecrets/status
+    verbs:
+      - update
+  
+  # Create/read secrets (decrypt sealed → regular)
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - watch
+  
+  # Create events (for logging)
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+
+---
+# ============================================
+# ClusterRole for Sealed Secrets Controller
+# Purpose: Decrypt sealed secrets into regular secrets
+# Why ClusterRole: Manages secrets in ALL namespaces
+# ============================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sealed-secrets-controller
+  labels:
+    app.kubernetes.io/name: sealed-secrets
+rules:
+  # Read/write sealed-secrets CRD (custom resource)
+  - apiGroups:
+      - bitnami.com
+    resources:
+      - sealedsecrets
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  
+  # Update sealed-secrets status field
+  - apiGroups:
+      - bitnami.com
+    resources:
+      - sealedsecrets/status
+    verbs:
+      - update
+  
+  # Create/read secrets (decrypt sealed → regular)
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - watch
+  
+  # Create events (for logging)
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
