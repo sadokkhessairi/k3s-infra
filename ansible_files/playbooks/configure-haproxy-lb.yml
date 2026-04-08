@@ -1,0 +1,180 @@
+---
+# ============================================
+# Configure HAProxy Load Balancer
+# ============================================
+- name: Configure HAProxy Load Balancer
+  hosts: k3s-lb
+  become: true
+  
+  vars:
+    haproxy_version: "2.4"
+    k3s_api_port: 6443
+    stats_port: 8404
+    haproxy_stats_password: "0000"    
+    # K3s master nodes
+    k3s_masters:
+      - name: master-0
+        ip: 192.168.122.10
+      - name: master-1
+        ip: 192.168.122.11
+      - name: master-2
+        ip: 192.168.122.12
+    
+    # All cluster nodes (for NodePort)
+    k3s_nodes:
+      - name: master-0
+        ip: 192.168.122.10
+      - name: master-1
+        ip: 192.168.122.11
+      - name: master-2
+        ip: 192.168.122.12
+      - name: worker-0
+        ip: 192.168.122.20
+      - name: worker-1
+        ip: 192.168.122.21
+
+  tasks:
+    # ==========================================
+    # 1. Install HAProxy
+    # ==========================================
+    - name: Install HAProxy
+      apt:
+        name:
+          - haproxy
+          - socat
+        state: present
+        update_cache: yes
+
+    - name: Check HAProxy version
+      command: haproxy -v
+      register: haproxy_version_output
+      changed_when: false
+
+    - name: Display HAProxy version
+      debug:
+        msg: "{{ haproxy_version_output.stdout_lines[0] }}"
+
+    # ==========================================
+    # 2. Backup original config
+    # ==========================================
+    - name: Backup original HAProxy config
+      copy:
+        src: /etc/haproxy/haproxy.cfg
+        dest: /etc/haproxy/haproxy.cfg.original
+        remote_src: yes
+        force: no
+
+    # ==========================================
+    # 3. Deploy HAProxy configuration
+    # ==========================================
+    - name: Deploy HAProxy configuration
+      template:
+        src: ../templates/haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+        owner: root
+        group: root
+        mode: '0644'
+        validate: 'haproxy -c -f %s'
+      notify: Restart HAProxy
+
+    # ==========================================
+    # 4. Configure rsyslog for HAProxy logs
+    # ==========================================
+    - name: Configure rsyslog for HAProxy
+      copy:
+        dest: /etc/rsyslog.d/49-haproxy.conf
+        content: |
+          # HAProxy log configuration
+          $ModLoad imudp
+          $UDPServerRun 514
+          
+          local0.* /var/log/haproxy.log
+          & stop
+        mode: '0644'
+      notify: Restart rsyslog
+
+    # ==========================================
+    # 5. Enable and start HAProxy
+    # ==========================================
+    - name: Enable HAProxy service
+      systemd:
+        name: haproxy
+        enabled: yes
+
+    - name: Start HAProxy service
+      systemd:
+        name: haproxy
+        state: started
+
+    # ==========================================
+    # 6. Configure logrotate for HAProxy logs
+    # ==========================================
+    - name: Configure logrotate for HAProxy
+      copy:
+        dest: /etc/logrotate.d/haproxy
+        content: |
+          /var/log/haproxy.log {
+              daily
+              rotate 7
+              missingok
+              notifempty
+              compress
+              delaycompress
+              sharedscripts
+              postrotate
+                  /usr/lib/rsyslog/rsyslog-rotate
+              endscript
+          }
+        mode: '0644'
+
+    # ==========================================
+    # 7. Verify HAProxy is running
+    # ==========================================
+    - name: Wait for HAProxy to be ready
+      wait_for:
+        host: 0.0.0.0
+        port: "{{ k3s_api_port }}"
+        delay: 2
+        timeout: 30
+
+    - name: Check HAProxy status
+      systemd:
+        name: haproxy
+        state: started
+      register: haproxy_status
+
+    - name: Display HAProxy status
+      debug:
+        msg: "HAProxy is {{ haproxy_status.status.ActiveState }}"
+
+    # ==========================================
+    # 8. Verify backend connectivity
+    # ==========================================
+    - name: Test connectivity to K3s masters
+      wait_for:
+        host: "{{ item.ip }}"
+        port: "{{ k3s_api_port }}"
+        timeout: 5
+      loop: "{{ k3s_masters }}"
+      register: master_connectivity
+      ignore_errors: yes
+
+    - name: Display master connectivity results
+      debug:
+        msg: "{{ item.item.name }} ({{ item.item.ip }}): {{ 'UP' if item.failed == false else 'DOWN' }}"
+      loop: "{{ master_connectivity.results }}"
+
+  # ============================================
+  # Handlers
+  # ============================================
+  handlers:
+    - name: Restart HAProxy
+      systemd:
+        name: haproxy
+        state: restarted
+
+    - name: Restart rsyslog
+      systemd:
+        name: rsyslog
+        state: restarted
+

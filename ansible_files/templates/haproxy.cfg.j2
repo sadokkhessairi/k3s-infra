@@ -1,0 +1,139 @@
+#---------------------------------------------------------------------
+# HAProxy Configuration for K3s Cluster
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# Generated: {{ ansible_date_time.iso8601 }}
+#---------------------------------------------------------------------
+
+#---------------------------------------------------------------------
+# Global settings
+#---------------------------------------------------------------------
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+
+    # Default SSL material locations
+    ca-base /etc/ssl/certs
+    crt-base /etc/ssl/private
+
+    # See: https://ssl-config.mozilla.org/#server=haproxy&server-version=2.0.3&config=intermediate
+    ssl-default-bind-ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
+    ssl-default-bind-ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256
+    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+
+#---------------------------------------------------------------------
+# Defaults
+#---------------------------------------------------------------------
+defaults
+    log     global
+    mode    tcp
+    option  tcplog
+    option  dontlognull
+    timeout connect 5000ms
+    timeout client  50000ms
+    timeout server  50000ms
+    errorfile 400 /etc/haproxy/errors/400.http
+    errorfile 403 /etc/haproxy/errors/403.http
+    errorfile 408 /etc/haproxy/errors/408.http
+    errorfile 500 /etc/haproxy/errors/500.http
+    errorfile 502 /etc/haproxy/errors/502.http
+    errorfile 503 /etc/haproxy/errors/503.http
+    errorfile 504 /etc/haproxy/errors/504.http
+
+#---------------------------------------------------------------------
+# Stats page
+#---------------------------------------------------------------------
+listen stats
+    bind *:{{ stats_port }}
+    mode http
+    stats enable
+    stats uri /
+    stats refresh 10s
+    stats show-legends
+    stats show-node
+    stats realm HAProxy\ Statistics
+    stats auth admin:{{ haproxy_stats_password }}
+    stats admin if TRUE
+
+#---------------------------------------------------------------------
+# K3s API Server (port {{ k3s_api_port }})
+#---------------------------------------------------------------------
+frontend k3s-api
+    bind *:{{ k3s_api_port }}
+    mode tcp
+    option tcplog
+    default_backend k3s-masters
+
+backend k3s-masters
+    mode tcp
+    balance roundrobin
+    option tcp-check
+    
+    # Health check: TCP connect to port {{ k3s_api_port }}
+    tcp-check connect port {{ k3s_api_port }}
+    
+    # Master nodes
+{% for master in k3s_masters %}
+    server {{ master.name }} {{ master.ip }}:{{ k3s_api_port }} check inter 2000 rise 2 fall 3
+{% endfor %}
+
+#---------------------------------------------------------------------
+# NodePort Services (30000-32767)
+#---------------------------------------------------------------------
+frontend nodeport-services
+    bind *:30000-32767
+    mode tcp
+    option tcplog
+    default_backend nodeport-backend
+
+backend nodeport-backend
+    mode tcp
+    balance roundrobin
+    option tcp-check
+    {% for node in k3s_nodes %}
+    server {{ node.name }}-np {{ node.ip }} check port 10250 inter 2000 rise 2 fall 3 
+    {% endfor %}	    
+
+#---------------------------------------------------------------------
+# HTTP services (port 80)
+#---------------------------------------------------------------------
+frontend http-in
+    bind *:80
+    mode http
+    option httplog
+    default_backend http-backend
+
+backend http-backend
+    mode http
+    balance roundrobin
+    option httpchk GET /healthz
+    http-check expect status 200-404
+    
+    # All nodes can serve HTTP
+{% for node in k3s_nodes %}
+    server {{ node.name }} {{ node.ip }}:80 check
+{% endfor %}
+
+#---------------------------------------------------------------------
+# HTTPS services (port 443)
+#---------------------------------------------------------------------
+frontend https-in
+    bind *:443
+    mode tcp
+    option tcplog
+    default_backend https-backend
+
+backend https-backend
+    mode tcp
+    balance roundrobin
+    option ssl-hello-chk
+    
+    # All nodes can serve HTTPS
+{% for node in k3s_nodes %}
+    server {{ node.name }} {{ node.ip }}:443 check
+{% endfor %}

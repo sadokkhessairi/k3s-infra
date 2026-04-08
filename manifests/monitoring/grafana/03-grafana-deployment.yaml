@@ -34,14 +34,14 @@ spec:
               name: grafana-admin-creds
               key: admin-user
         - name: GF_SECURITY_ADMIN_PASSWORD
-          valueForm:
+          valueFrom:
             secretKeyRef:
               name: grafana-admin-creds
               key: admin-password
         - name: GF_INSTALL_PLUGINS
           value: ""
         - name: GF_SERVER_ROOT_URL
-          value: "http://localhost:3000"
+          value: "http://grafana.sadok.lab"
         volumeMounts:
         - name: storage
           mountPath: /var/lib/grafana

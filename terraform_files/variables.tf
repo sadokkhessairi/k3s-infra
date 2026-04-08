@@ -25,7 +25,7 @@ variable "master_count" {
 variable "worker_count" {
   description = "Number of worker nodes"
   type        = number
-  default     = 3
+  default     = 2
 }
 
 variable "master_memory" {
@@ -55,7 +55,7 @@ variable "worker_vcpu" {
 variable "disk_size" {
   description = "OS disk size in bytes (default 15GB)"
   type        = number
-  default     = 15212254720
+  default     = 53687091200
 }
 
 variable "ssh_public_key_path" {
@@ -104,5 +104,5 @@ variable "master_ips" {
 variable "worker_ips" {
   description = "Static IPs for worker nodes"
   type        = list(string)
-  default     = ["192.168.122.20", "192.168.122.21", "192.168.122.22"]
+  default     = ["192.168.122.20", "192.168.122.21"]
 }

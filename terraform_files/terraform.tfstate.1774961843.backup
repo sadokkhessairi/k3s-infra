@@ -1,0 +1,1086 @@
+{
+  "version": 4,
+  "terraform_version": "1.14.7",
+  "serial": 138,
+  "lineage": "3a7fa1e9-121c-1ae4-d2d0-a176427c4927",
+  "outputs": {
+    "all_ips": {
+      "value": {
+        "k3s-lb": "192.168.122.100",
+        "k3s-master-0": "192.168.122.11",
+        "k3s-master-1": "192.168.122.12",
+        "k3s-master-2": "192.168.122.10",
+        "k3s-worker-0": "192.168.122.20",
+        "k3s-worker-1": "192.168.122.21",
+        "k3s-worker-2": "192.168.122.22"
+      },
+      "type": [
+        "object",
+        {
+          "k3s-lb": "string",
+          "k3s-master-0": "string",
+          "k3s-master-1": "string",
+          "k3s-master-2": "string",
+          "k3s-worker-0": "string",
+          "k3s-worker-1": "string",
+          "k3s-worker-2": "string"
+        }
+      ]
+    },
+    "k3s_api_endpoint": {
+      "value": "https://192.168.122.100:6443",
+      "type": "string"
+    },
+    "lb_ip": {
+      "value": {
+        "k3s-lb": "192.168.122.100"
+      },
+      "type": [
+        "map",
+        "string"
+      ]
+    },
+    "longhorn_enabled": {
+      "value": true,
+      "type": "bool"
+    },
+    "master_ips": {
+      "value": {
+        "k3s-master-0": "192.168.122.11",
+        "k3s-master-1": "192.168.122.12",
+        "k3s-master-2": "192.168.122.10"
+      },
+      "type": [
+        "object",
+        {
+          "k3s-master-0": "string",
+          "k3s-master-1": "string",
+          "k3s-master-2": "string"
+        }
+      ]
+    },
+    "worker_ips": {
+      "value": {
+        "k3s-worker-0": "192.168.122.20",
+        "k3s-worker-1": "192.168.122.21",
+        "k3s-worker-2": "192.168.122.22"
+      },
+      "type": [
+        "object",
+        {
+          "k3s-worker-0": "string",
+          "k3s-worker-1": "string",
+          "k3s-worker-2": "string"
+        }
+      ]
+    }
+  },
+  "resources": [
+    {
+      "mode": "data",
+      "type": "template_file",
+      "name": "user_data",
+      "provider": "provider[\"registry.terraform.io/hashicorp/template\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "filename": null,
+            "id": "a222617b3d19e3af64938469f38884dc047d62b6df9cf3888349e4301bc7cb01",
+            "rendered": "#cloud-config\n\npreserve_hostname: false\n\nusers:\n  - name: ubuntu\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    groups: users, admin, sudo\n    shell: /bin/bash\n    lock_passwd: false\n    ssh_authorized_keys:\n      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCcZAFUGRztOwrOyj1kFIj89krcym8CMSKo+lRrkZAZ0qCXELHKix9dHVb++VW4Yx0lr36wrAniO1ssQkjFe4H1S78xw0cyKtVSHzIfTHgc9HTn9rarocDUzzUfAG9rn7zUBV+KWD+GWQUmsZpkp+52KHXKHjTi1rZqYrBb4/Xc1/1VMsPjtI1nbD3E1dVazoP5izbZ9WsvzfXmHcyC+NsUhdZZGr5CR+W2FTakvWly4w9yIvuwzSVJyMd5rj8J/9YH4gR/6+jEuwSIEiiWMmXhpeY4tTgrJny+oHui/l+hv2XjEJodhemXQKQX1vCzv0+oNnLPURGaAkkbnITGVclQc/2hTHIIMj5ipgMoV21fDVOCm7gKALT4UPFXjNOoorB+6Ng02RDMrni1MbZkTf6Ja8Ki3RSsxNRpS23X+5uIGQmGst85xrfTnEk1DPq06xdOl0mezW/b7ffaCQze6gS5rh2aw2xPFCNloTVpUkpUguKOMZA/zzd9Rwru01nBhJ+AQpue4TdFapY3ifzTHCvaFXwWS2EEaE67Sv5+63Iw+yqFDlRxK1vfZRwBxjCAvJHrSSkQy2aKapHm1uqA3Z4MkygyxcFPbh6UmsSeSZ37h4j2IwiaJUrT/ZciZEB6HuHGaaxgI23Y/5T1+FVCrBUW5WhcFV+dyQs2kTfQjP2zpQ== sadok@sadok-G5-MF\n\n\nchpasswd:\n  list: |\n    ubuntu:ubuntu\n  expire: false\n\npackage_update: true\npackage_upgrade: true\npackages:\n  - qemu-guest-agent\n  - curl\n  - wget\n  - vim\n  - net-tools\n  - ca-certificates\n  - gnupg\n  - lsb-release\n  - open-iscsi          # For Longhorn\n  - nfs-common          # For NFS storage\n  - jq                  # Useful for scripts\n  - util-linux          # For disk management\n\nnetwork:\n  version: 2\n  ethernets:\n    ens3:\n      dhcp4: true\n      dhcp6: false\n\nswap:\n  filename: /swap.img\n  size: 0\n\nbootcmd:\n  - [ cloud-init-per, once, swapoff, swapoff, -a ]\n\nruncmd:\n  # Disable swap\n  - swapoff -a\n  - sed -i '/ swap / s/^/#/' /etc/fstab\n  \n  # Enable services\n  - systemctl enable qemu-guest-agent\n  - systemctl start qemu-guest-agent\n  - systemctl enable iscsid\n  - systemctl start iscsid\n  \n  # Kernel modules for k8s\n  - modprobe overlay\n  - modprobe br_netfilter\n  - echo \"overlay\" \u003e\u003e /etc/modules-load.d/k8s.conf\n  - echo \"br_netfilter\" \u003e\u003e /etc/modules-load.d/k8s.conf\n  \n  # Sysctl for k8s\n  - echo \"net.bridge.bridge-nf-call-iptables = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"net.bridge.bridge-nf-call-ip6tables = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"net.ipv4.ip_forward = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"fs.inotify.max_user_instances = 8192\" \u003e\u003e /etc/sysctl.conf\n  - echo \"fs.inotify.max_user_watches = 524288\" \u003e\u003e /etc/sysctl.conf\n  - sysctl -p\n  \n  # Prepare additional disk for Longhorn if exists (will be /dev/vdb)\n  - |\n    if [ -b /dev/vdb ]; then\n      # Format the disk as ext4\n      mkfs.ext4 -F /dev/vdb\n      # Create mount point\n      mkdir -p /var/lib/longhorn\n      # Get UUID\n      UUID=$(blkid -s UUID -o value /dev/vdb)\n      # Add to fstab\n      echo \"UUID=$UUID /var/lib/longhorn ext4 defaults 0 2\" \u003e\u003e /etc/fstab\n      # Mount\n      mount -a\n      # Set permissions\n      chmod 755 /var/lib/longhorn\n    fi\n\ntimezone: Africa/Tunis\n\nfinal_message: \"Cloud-init completed in $UPTIME seconds\"\n",
+            "template": "#cloud-config\n\npreserve_hostname: false\n\nusers:\n  - name: ubuntu\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    groups: users, admin, sudo\n    shell: /bin/bash\n    lock_passwd: false\n    ssh_authorized_keys:\n      - ${ssh_public_key}\n\nchpasswd:\n  list: |\n    ubuntu:ubuntu\n  expire: false\n\npackage_update: true\npackage_upgrade: true\npackages:\n  - qemu-guest-agent\n  - curl\n  - wget\n  - vim\n  - net-tools\n  - ca-certificates\n  - gnupg\n  - lsb-release\n  - open-iscsi          # For Longhorn\n  - nfs-common          # For NFS storage\n  - jq                  # Useful for scripts\n  - util-linux          # For disk management\n\nnetwork:\n  version: 2\n  ethernets:\n    ens3:\n      dhcp4: true\n      dhcp6: false\n\nswap:\n  filename: /swap.img\n  size: 0\n\nbootcmd:\n  - [ cloud-init-per, once, swapoff, swapoff, -a ]\n\nruncmd:\n  # Disable swap\n  - swapoff -a\n  - sed -i '/ swap / s/^/#/' /etc/fstab\n  \n  # Enable services\n  - systemctl enable qemu-guest-agent\n  - systemctl start qemu-guest-agent\n  - systemctl enable iscsid\n  - systemctl start iscsid\n  \n  # Kernel modules for k8s\n  - modprobe overlay\n  - modprobe br_netfilter\n  - echo \"overlay\" \u003e\u003e /etc/modules-load.d/k8s.conf\n  - echo \"br_netfilter\" \u003e\u003e /etc/modules-load.d/k8s.conf\n  \n  # Sysctl for k8s\n  - echo \"net.bridge.bridge-nf-call-iptables = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"net.bridge.bridge-nf-call-ip6tables = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"net.ipv4.ip_forward = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"fs.inotify.max_user_instances = 8192\" \u003e\u003e /etc/sysctl.conf\n  - echo \"fs.inotify.max_user_watches = 524288\" \u003e\u003e /etc/sysctl.conf\n  - sysctl -p\n  \n  # Prepare additional disk for Longhorn if exists (will be /dev/vdb)\n  - |\n    if [ -b /dev/vdb ]; then\n      # Format the disk as ext4\n      mkfs.ext4 -F /dev/vdb\n      # Create mount point\n      mkdir -p /var/lib/longhorn\n      # Get UUID\n      UUID=$(blkid -s UUID -o value /dev/vdb)\n      # Add to fstab\n      echo \"UUID=$UUID /var/lib/longhorn ext4 defaults 0 2\" \u003e\u003e /etc/fstab\n      # Mount\n      mount -a\n      # Set permissions\n      chmod 755 /var/lib/longhorn\n    fi\n\ntimezone: Africa/Tunis\n\nfinal_message: \"Cloud-init completed in $UPTIME seconds\"\n",
+            "vars": {
+              "ssh_public_key": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCcZAFUGRztOwrOyj1kFIj89krcym8CMSKo+lRrkZAZ0qCXELHKix9dHVb++VW4Yx0lr36wrAniO1ssQkjFe4H1S78xw0cyKtVSHzIfTHgc9HTn9rarocDUzzUfAG9rn7zUBV+KWD+GWQUmsZpkp+52KHXKHjTi1rZqYrBb4/Xc1/1VMsPjtI1nbD3E1dVazoP5izbZ9WsvzfXmHcyC+NsUhdZZGr5CR+W2FTakvWly4w9yIvuwzSVJyMd5rj8J/9YH4gR/6+jEuwSIEiiWMmXhpeY4tTgrJny+oHui/l+hv2XjEJodhemXQKQX1vCzv0+oNnLPURGaAkkbnITGVclQc/2hTHIIMj5ipgMoV21fDVOCm7gKALT4UPFXjNOoorB+6Ng02RDMrni1MbZkTf6Ja8Ki3RSsxNRpS23X+5uIGQmGst85xrfTnEk1DPq06xdOl0mezW/b7ffaCQze6gS5rh2aw2xPFCNloTVpUkpUguKOMZA/zzd9Rwru01nBhJ+AQpue4TdFapY3ifzTHCvaFXwWS2EEaE67Sv5+63Iw+yqFDlRxK1vfZRwBxjCAvJHrSSkQy2aKapHm1uqA3Z4MkygyxcFPbh6UmsSeSZ37h4j2IwiaJUrT/ZciZEB6HuHGaaxgI23Y/5T1+FVCrBUW5WhcFV+dyQs2kTfQjP2zpQ== sadok@sadok-G5-MF\n"
+            }
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_cloudinit_disk",
+      "name": "worker",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "index_key": 2,
+          "schema_version": 0,
+          "attributes": {
+            "id": "/mnt/k3s-storage/cloudinit-worker-2.iso;db9eb85f-66c1-4c48-a6bd-705ad54e75f0",
+            "meta_data": "instance-id: k3s-worker-2\nlocal-hostname: k3s-worker-2\n",
+            "name": "cloudinit-worker-2.iso",
+            "network_config": "",
+            "pool": "k3s-pool",
+            "user_data": "#cloud-config\n\npreserve_hostname: false\n\nusers:\n  - name: ubuntu\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    groups: users, admin, sudo\n    shell: /bin/bash\n    lock_passwd: false\n    ssh_authorized_keys:\n      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCcZAFUGRztOwrOyj1kFIj89krcym8CMSKo+lRrkZAZ0qCXELHKix9dHVb++VW4Yx0lr36wrAniO1ssQkjFe4H1S78xw0cyKtVSHzIfTHgc9HTn9rarocDUzzUfAG9rn7zUBV+KWD+GWQUmsZpkp+52KHXKHjTi1rZqYrBb4/Xc1/1VMsPjtI1nbD3E1dVazoP5izbZ9WsvzfXmHcyC+NsUhdZZGr5CR+W2FTakvWly4w9yIvuwzSVJyMd5rj8J/9YH4gR/6+jEuwSIEiiWMmXhpeY4tTgrJny+oHui/l+hv2XjEJodhemXQKQX1vCzv0+oNnLPURGaAkkbnITGVclQc/2hTHIIMj5ipgMoV21fDVOCm7gKALT4UPFXjNOoorB+6Ng02RDMrni1MbZkTf6Ja8Ki3RSsxNRpS23X+5uIGQmGst85xrfTnEk1DPq06xdOl0mezW/b7ffaCQze6gS5rh2aw2xPFCNloTVpUkpUguKOMZA/zzd9Rwru01nBhJ+AQpue4TdFapY3ifzTHCvaFXwWS2EEaE67Sv5+63Iw+yqFDlRxK1vfZRwBxjCAvJHrSSkQy2aKapHm1uqA3Z4MkygyxcFPbh6UmsSeSZ37h4j2IwiaJUrT/ZciZEB6HuHGaaxgI23Y/5T1+FVCrBUW5WhcFV+dyQs2kTfQjP2zpQ== sadok@sadok-G5-MF\n\n\nchpasswd:\n  list: |\n    ubuntu:ubuntu\n  expire: false\n\npackage_update: true\npackage_upgrade: true\npackages:\n  - qemu-guest-agent\n  - curl\n  - wget\n  - vim\n  - net-tools\n  - ca-certificates\n  - gnupg\n  - lsb-release\n  - open-iscsi          # For Longhorn\n  - nfs-common          # For NFS storage\n  - jq                  # Useful for scripts\n  - util-linux          # For disk management\n\nnetwork:\n  version: 2\n  ethernets:\n    ens3:\n      dhcp4: true\n      dhcp6: false\n\nswap:\n  filename: /swap.img\n  size: 0\n\nbootcmd:\n  - [ cloud-init-per, once, swapoff, swapoff, -a ]\n\nruncmd:\n  # Disable swap\n  - swapoff -a\n  - sed -i '/ swap / s/^/#/' /etc/fstab\n  \n  # Enable services\n  - systemctl enable qemu-guest-agent\n  - systemctl start qemu-guest-agent\n  - systemctl enable iscsid\n  - systemctl start iscsid\n  \n  # Kernel modules for k8s\n  - modprobe overlay\n  - modprobe br_netfilter\n  - echo \"overlay\" \u003e\u003e /etc/modules-load.d/k8s.conf\n  - echo \"br_netfilter\" \u003e\u003e /etc/modules-load.d/k8s.conf\n  \n  # Sysctl for k8s\n  - echo \"net.bridge.bridge-nf-call-iptables = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"net.bridge.bridge-nf-call-ip6tables = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"net.ipv4.ip_forward = 1\" \u003e\u003e /etc/sysctl.conf\n  - echo \"fs.inotify.max_user_instances = 8192\" \u003e\u003e /etc/sysctl.conf\n  - echo \"fs.inotify.max_user_watches = 524288\" \u003e\u003e /etc/sysctl.conf\n  - sysctl -p\n  \n  # Prepare additional disk for Longhorn if exists (will be /dev/vdb)\n  - |\n    if [ -b /dev/vdb ]; then\n      # Format the disk as ext4\n      mkfs.ext4 -F /dev/vdb\n      # Create mount point\n      mkdir -p /var/lib/longhorn\n      # Get UUID\n      UUID=$(blkid -s UUID -o value /dev/vdb)\n      # Add to fstab\n      echo \"UUID=$UUID /var/lib/longhorn ext4 defaults 0 2\" \u003e\u003e /etc/fstab\n      # Mount\n      mount -a\n      # Set permissions\n      chmod 755 /var/lib/longhorn\n    fi\n\ntimezone: Africa/Tunis\n\nfinal_message: \"Cloud-init completed in $UPTIME seconds\"\n"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "data.template_file.user_data"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_domain",
+      "name": "lb",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "arch": "x86_64",
+            "autostart": false,
+            "boot_device": [],
+            "cloudinit": "/mnt/k3s-storage/cloudinit-lb.iso;8503e7b2-b072-4f0f-b778-ee8e1db001a2",
+            "cmdline": null,
+            "console": [
+              {
+                "source_host": "127.0.0.1",
+                "source_path": "",
+                "source_service": "0",
+                "target_port": "0",
+                "target_type": "serial",
+                "type": "pty"
+              }
+            ],
+            "coreos_ignition": null,
+            "cpu": [
+              {
+                "mode": "custom"
+              }
+            ],
+            "description": "",
+            "disk": [
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-lb.qcow2",
+                "wwn": ""
+              }
+            ],
+            "emulator": "/usr/bin/qemu-system-x86_64",
+            "filesystem": [],
+            "firmware": null,
+            "fw_cfg_name": "opt/com.coreos/config",
+            "graphics": [
+              {
+                "autoport": true,
+                "listen_address": "127.0.0.1",
+                "listen_type": "address",
+                "type": "spice",
+                "websocket": 0
+              }
+            ],
+            "id": "59de36ab-2696-476f-84d7-3c2bba0a742d",
+            "initrd": "",
+            "kernel": "",
+            "machine": "ubuntu",
+            "memory": 2048,
+            "metadata": null,
+            "name": "k3s-lb",
+            "network_interface": [
+              {
+                "addresses": [
+                  "192.168.122.102"
+                ],
+                "bridge": "",
+                "hostname": "",
+                "mac": "52:54:00:A6:7E:F4",
+                "macvtap": "",
+                "network_id": "66068645-0001-4eed-968b-e81ba1e04840",
+                "network_name": "default",
+                "passthrough": "",
+                "vepa": "",
+                "wait_for_lease": true
+              }
+            ],
+            "nvram": [],
+            "qemu_agent": false,
+            "running": true,
+            "timeouts": null,
+            "tpm": [],
+            "vcpu": 2,
+            "video": [],
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ==",
+          "dependencies": [
+            "data.template_file.user_data",
+            "libvirt_cloudinit_disk.lb",
+            "libvirt_volume.lb",
+            "libvirt_volume.os_image"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_domain",
+      "name": "master",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "arch": "x86_64",
+            "autostart": false,
+            "boot_device": [],
+            "cloudinit": "/mnt/k3s-storage/cloudinit-master-0.iso;5840108a-d839-45a9-bc30-1c09454422ea",
+            "cmdline": null,
+            "console": [
+              {
+                "source_host": "127.0.0.1",
+                "source_path": "",
+                "source_service": "0",
+                "target_port": "0",
+                "target_type": "serial",
+                "type": "pty"
+              }
+            ],
+            "coreos_ignition": null,
+            "cpu": [
+              {
+                "mode": "custom"
+              }
+            ],
+            "description": "",
+            "disk": [
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-master-0.qcow2",
+                "wwn": ""
+              }
+            ],
+            "emulator": "/usr/bin/qemu-system-x86_64",
+            "filesystem": [],
+            "firmware": null,
+            "fw_cfg_name": "opt/com.coreos/config",
+            "graphics": [
+              {
+                "autoport": true,
+                "listen_address": "127.0.0.1",
+                "listen_type": "address",
+                "type": "spice",
+                "websocket": 0
+              }
+            ],
+            "id": "0f986dc4-a9e4-4928-867c-dd2335ecc2ff",
+            "initrd": "",
+            "kernel": "",
+            "machine": "ubuntu",
+            "memory": 2048,
+            "metadata": null,
+            "name": "k3s-master-0",
+            "network_interface": [
+              {
+                "addresses": [
+                  "192.168.122.101"
+                ],
+                "bridge": "",
+                "hostname": "",
+                "mac": "52:54:00:92:30:CD",
+                "macvtap": "",
+                "network_id": "66068645-0001-4eed-968b-e81ba1e04840",
+                "network_name": "default",
+                "passthrough": "",
+                "vepa": "",
+                "wait_for_lease": true
+              }
+            ],
+            "nvram": [],
+            "qemu_agent": false,
+            "running": true,
+            "timeouts": null,
+            "tpm": [],
+            "vcpu": 2,
+            "video": [],
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ==",
+          "dependencies": [
+            "data.template_file.user_data",
+            "libvirt_cloudinit_disk.master",
+            "libvirt_volume.master",
+            "libvirt_volume.os_image"
+          ]
+        },
+        {
+          "index_key": 1,
+          "schema_version": 0,
+          "attributes": {
+            "arch": "x86_64",
+            "autostart": false,
+            "boot_device": [],
+            "cloudinit": "/mnt/k3s-storage/cloudinit-master-1.iso;bc2d76e8-9efd-4a52-99ec-ff6c3592bc7d",
+            "cmdline": null,
+            "console": [
+              {
+                "source_host": "127.0.0.1",
+                "source_path": "",
+                "source_service": "0",
+                "target_port": "0",
+                "target_type": "serial",
+                "type": "pty"
+              }
+            ],
+            "coreos_ignition": null,
+            "cpu": [
+              {
+                "mode": "custom"
+              }
+            ],
+            "description": "",
+            "disk": [
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-master-1.qcow2",
+                "wwn": ""
+              }
+            ],
+            "emulator": "/usr/bin/qemu-system-x86_64",
+            "filesystem": [],
+            "firmware": null,
+            "fw_cfg_name": "opt/com.coreos/config",
+            "graphics": [
+              {
+                "autoport": true,
+                "listen_address": "127.0.0.1",
+                "listen_type": "address",
+                "type": "spice",
+                "websocket": 0
+              }
+            ],
+            "id": "4a10eb71-f4f4-4076-a0ae-3fde0d8d726a",
+            "initrd": "",
+            "kernel": "",
+            "machine": "ubuntu",
+            "memory": 2048,
+            "metadata": null,
+            "name": "k3s-master-1",
+            "network_interface": [
+              {
+                "addresses": [
+                  "192.168.122.204"
+                ],
+                "bridge": "",
+                "hostname": "",
+                "mac": "52:54:00:D6:6C:62",
+                "macvtap": "",
+                "network_id": "66068645-0001-4eed-968b-e81ba1e04840",
+                "network_name": "default",
+                "passthrough": "",
+                "vepa": "",
+                "wait_for_lease": true
+              }
+            ],
+            "nvram": [],
+            "qemu_agent": false,
+            "running": true,
+            "timeouts": null,
+            "tpm": [],
+            "vcpu": 2,
+            "video": [],
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ==",
+          "dependencies": [
+            "data.template_file.user_data",
+            "libvirt_cloudinit_disk.master",
+            "libvirt_volume.master",
+            "libvirt_volume.os_image"
+          ]
+        },
+        {
+          "index_key": 2,
+          "schema_version": 0,
+          "attributes": {
+            "arch": "x86_64",
+            "autostart": false,
+            "boot_device": [],
+            "cloudinit": "/mnt/k3s-storage/cloudinit-master-2.iso;27e5dd4b-db6d-4421-9e77-e08b5f3a6c02",
+            "cmdline": null,
+            "console": [
+              {
+                "source_host": "127.0.0.1",
+                "source_path": "",
+                "source_service": "0",
+                "target_port": "0",
+                "target_type": "serial",
+                "type": "pty"
+              }
+            ],
+            "coreos_ignition": null,
+            "cpu": [
+              {
+                "mode": "custom"
+              }
+            ],
+            "description": "",
+            "disk": [
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-master-2.qcow2",
+                "wwn": ""
+              }
+            ],
+            "emulator": "/usr/bin/qemu-system-x86_64",
+            "filesystem": [],
+            "firmware": null,
+            "fw_cfg_name": "opt/com.coreos/config",
+            "graphics": [
+              {
+                "autoport": true,
+                "listen_address": "127.0.0.1",
+                "listen_type": "address",
+                "type": "spice",
+                "websocket": 0
+              }
+            ],
+            "id": "68b22477-9586-41e3-975f-57e2fa4cf61f",
+            "initrd": "",
+            "kernel": "",
+            "machine": "ubuntu",
+            "memory": 2048,
+            "metadata": null,
+            "name": "k3s-master-2",
+            "network_interface": [
+              {
+                "addresses": [
+                  "192.168.122.182"
+                ],
+                "bridge": "",
+                "hostname": "",
+                "mac": "52:54:00:12:6F:B2",
+                "macvtap": "",
+                "network_id": "66068645-0001-4eed-968b-e81ba1e04840",
+                "network_name": "default",
+                "passthrough": "",
+                "vepa": "",
+                "wait_for_lease": true
+              }
+            ],
+            "nvram": [],
+            "qemu_agent": false,
+            "running": true,
+            "timeouts": null,
+            "tpm": [],
+            "vcpu": 2,
+            "video": [],
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ==",
+          "dependencies": [
+            "data.template_file.user_data",
+            "libvirt_cloudinit_disk.master",
+            "libvirt_volume.master",
+            "libvirt_volume.os_image"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_domain",
+      "name": "worker",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "arch": "x86_64",
+            "autostart": false,
+            "boot_device": [],
+            "cloudinit": "/mnt/k3s-storage/cloudinit-worker-0.iso;4f37900b-8e67-4112-8e66-7638bb00a5ee",
+            "cmdline": null,
+            "console": [
+              {
+                "source_host": "127.0.0.1",
+                "source_path": "",
+                "source_service": "0",
+                "target_port": "0",
+                "target_type": "serial",
+                "type": "pty"
+              }
+            ],
+            "coreos_ignition": null,
+            "cpu": [
+              {
+                "mode": "custom"
+              }
+            ],
+            "description": "",
+            "disk": [
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-worker-0.qcow2",
+                "wwn": ""
+              },
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-worker-0-storage.qcow2",
+                "wwn": ""
+              }
+            ],
+            "emulator": "/usr/bin/qemu-system-x86_64",
+            "filesystem": [],
+            "firmware": null,
+            "fw_cfg_name": "opt/com.coreos/config",
+            "graphics": [
+              {
+                "autoport": true,
+                "listen_address": "127.0.0.1",
+                "listen_type": "address",
+                "type": "spice",
+                "websocket": 0
+              }
+            ],
+            "id": "41752fc8-6a13-4655-a08e-4644340097b2",
+            "initrd": "",
+            "kernel": "",
+            "machine": "ubuntu",
+            "memory": 3072,
+            "metadata": null,
+            "name": "k3s-worker-0",
+            "network_interface": [
+              {
+                "addresses": [
+                  "192.168.122.211"
+                ],
+                "bridge": "",
+                "hostname": "",
+                "mac": "52:54:00:EE:94:AF",
+                "macvtap": "",
+                "network_id": "66068645-0001-4eed-968b-e81ba1e04840",
+                "network_name": "default",
+                "passthrough": "",
+                "vepa": "",
+                "wait_for_lease": true
+              }
+            ],
+            "nvram": [],
+            "qemu_agent": false,
+            "running": true,
+            "timeouts": null,
+            "tpm": [],
+            "vcpu": 2,
+            "video": [],
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ==",
+          "dependencies": [
+            "data.template_file.user_data",
+            "libvirt_cloudinit_disk.worker",
+            "libvirt_volume.os_image",
+            "libvirt_volume.worker",
+            "libvirt_volume.worker_storage"
+          ]
+        },
+        {
+          "index_key": 1,
+          "schema_version": 0,
+          "attributes": {
+            "arch": "x86_64",
+            "autostart": false,
+            "boot_device": [],
+            "cloudinit": "/mnt/k3s-storage/cloudinit-worker-1.iso;ce468b51-56f7-43fc-86bf-056ccb8f886d",
+            "cmdline": null,
+            "console": [
+              {
+                "source_host": "127.0.0.1",
+                "source_path": "",
+                "source_service": "0",
+                "target_port": "0",
+                "target_type": "serial",
+                "type": "pty"
+              }
+            ],
+            "coreos_ignition": null,
+            "cpu": [
+              {
+                "mode": "custom"
+              }
+            ],
+            "description": "",
+            "disk": [
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-worker-1.qcow2",
+                "wwn": ""
+              },
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-worker-1-storage.qcow2",
+                "wwn": ""
+              }
+            ],
+            "emulator": "/usr/bin/qemu-system-x86_64",
+            "filesystem": [],
+            "firmware": null,
+            "fw_cfg_name": "opt/com.coreos/config",
+            "graphics": [
+              {
+                "autoport": true,
+                "listen_address": "127.0.0.1",
+                "listen_type": "address",
+                "type": "spice",
+                "websocket": 0
+              }
+            ],
+            "id": "0d63dfd6-fe61-4313-ad7a-dcb16bea4864",
+            "initrd": "",
+            "kernel": "",
+            "machine": "ubuntu",
+            "memory": 3072,
+            "metadata": null,
+            "name": "k3s-worker-1",
+            "network_interface": [
+              {
+                "addresses": [
+                  "192.168.122.238"
+                ],
+                "bridge": "",
+                "hostname": "",
+                "mac": "52:54:00:C6:9E:3E",
+                "macvtap": "",
+                "network_id": "66068645-0001-4eed-968b-e81ba1e04840",
+                "network_name": "default",
+                "passthrough": "",
+                "vepa": "",
+                "wait_for_lease": true
+              }
+            ],
+            "nvram": [],
+            "qemu_agent": false,
+            "running": true,
+            "timeouts": null,
+            "tpm": [],
+            "vcpu": 2,
+            "video": [],
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ==",
+          "dependencies": [
+            "data.template_file.user_data",
+            "libvirt_cloudinit_disk.worker",
+            "libvirt_volume.os_image",
+            "libvirt_volume.worker",
+            "libvirt_volume.worker_storage"
+          ]
+        },
+        {
+          "index_key": 2,
+          "schema_version": 0,
+          "attributes": {
+            "arch": "x86_64",
+            "autostart": false,
+            "boot_device": [],
+            "cloudinit": "/mnt/k3s-storage/cloudinit-worker-2.iso;db9eb85f-66c1-4c48-a6bd-705ad54e75f0",
+            "cmdline": null,
+            "console": [
+              {
+                "source_host": "127.0.0.1",
+                "source_path": "",
+                "source_service": "0",
+                "target_port": "0",
+                "target_type": "serial",
+                "type": "pty"
+              }
+            ],
+            "coreos_ignition": null,
+            "cpu": [
+              {
+                "mode": "custom"
+              }
+            ],
+            "description": "",
+            "disk": [
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-worker-2.qcow2",
+                "wwn": ""
+              },
+              {
+                "block_device": "",
+                "file": "",
+                "scsi": false,
+                "url": "",
+                "volume_id": "/mnt/k3s-storage/k3s-worker-2-storage.qcow2",
+                "wwn": ""
+              }
+            ],
+            "emulator": "/usr/bin/qemu-system-x86_64",
+            "filesystem": [],
+            "firmware": null,
+            "fw_cfg_name": "opt/com.coreos/config",
+            "graphics": [
+              {
+                "autoport": true,
+                "listen_address": "127.0.0.1",
+                "listen_type": "address",
+                "type": "spice",
+                "websocket": 0
+              }
+            ],
+            "id": "8555fbb7-d815-4adf-87e1-551fc7390bc8",
+            "initrd": "",
+            "kernel": "",
+            "machine": "ubuntu",
+            "memory": 3072,
+            "metadata": null,
+            "name": "k3s-worker-2",
+            "network_interface": [
+              {
+                "addresses": [
+                  "192.168.122.126"
+                ],
+                "bridge": "",
+                "hostname": "",
+                "mac": "52:54:00:6E:69:B1",
+                "macvtap": "",
+                "network_id": "66068645-0001-4eed-968b-e81ba1e04840",
+                "network_name": "default",
+                "passthrough": "",
+                "vepa": "",
+                "wait_for_lease": true
+              }
+            ],
+            "nvram": [],
+            "qemu_agent": false,
+            "running": true,
+            "timeouts": null,
+            "tpm": [],
+            "vcpu": 2,
+            "video": [],
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ==",
+          "dependencies": [
+            "data.template_file.user_data",
+            "libvirt_cloudinit_disk.worker",
+            "libvirt_volume.os_image",
+            "libvirt_volume.worker",
+            "libvirt_volume.worker_storage"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_volume",
+      "name": "lb",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": "/mnt/k3s-storage/ubuntu-22.04-base",
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-lb.qcow2",
+            "name": "k3s-lb.qcow2",
+            "pool": "k3s-pool",
+            "size": 10737418240,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "libvirt_volume.os_image"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_volume",
+      "name": "master",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": "/mnt/k3s-storage/ubuntu-22.04-base",
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-master-0.qcow2",
+            "name": "k3s-master-0.qcow2",
+            "pool": "k3s-pool",
+            "size": 15212255232,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "libvirt_volume.os_image"
+          ]
+        },
+        {
+          "index_key": 1,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": "/mnt/k3s-storage/ubuntu-22.04-base",
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-master-1.qcow2",
+            "name": "k3s-master-1.qcow2",
+            "pool": "k3s-pool",
+            "size": 15212255232,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "libvirt_volume.os_image"
+          ]
+        },
+        {
+          "index_key": 2,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": "/mnt/k3s-storage/ubuntu-22.04-base",
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-master-2.qcow2",
+            "name": "k3s-master-2.qcow2",
+            "pool": "k3s-pool",
+            "size": 15212255232,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "libvirt_volume.os_image"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_volume",
+      "name": "os_image",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": null,
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/ubuntu-22.04-base",
+            "name": "ubuntu-22.04-base",
+            "pool": "k3s-pool",
+            "size": 2361393152,
+            "source": "/mnt/k3s-storage/jammy-server-cloudimg-amd64.img",
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_volume",
+      "name": "worker",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": "/mnt/k3s-storage/ubuntu-22.04-base",
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-worker-0.qcow2",
+            "name": "k3s-worker-0.qcow2",
+            "pool": "k3s-pool",
+            "size": 15212255232,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "libvirt_volume.os_image"
+          ]
+        },
+        {
+          "index_key": 1,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": "/mnt/k3s-storage/ubuntu-22.04-base",
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-worker-1.qcow2",
+            "name": "k3s-worker-1.qcow2",
+            "pool": "k3s-pool",
+            "size": 15212255232,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "libvirt_volume.os_image"
+          ]
+        },
+        {
+          "index_key": 2,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": "/mnt/k3s-storage/ubuntu-22.04-base",
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-worker-2.qcow2",
+            "name": "k3s-worker-2.qcow2",
+            "pool": "k3s-pool",
+            "size": 15212255232,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "libvirt_volume.os_image"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "libvirt_volume",
+      "name": "worker_storage",
+      "provider": "provider[\"registry.terraform.io/dmacvicar/libvirt\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": null,
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-worker-0-storage.qcow2",
+            "name": "k3s-worker-0-storage.qcow2",
+            "pool": "k3s-pool",
+            "size": 53687091200,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        },
+        {
+          "index_key": 1,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": null,
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-worker-1-storage.qcow2",
+            "name": "k3s-worker-1-storage.qcow2",
+            "pool": "k3s-pool",
+            "size": 53687091200,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        },
+        {
+          "index_key": 2,
+          "schema_version": 0,
+          "attributes": {
+            "base_volume_id": null,
+            "base_volume_name": null,
+            "base_volume_pool": null,
+            "format": "qcow2",
+            "id": "/mnt/k3s-storage/k3s-worker-2-storage.qcow2",
+            "name": "k3s-worker-2-storage.qcow2",
+            "pool": "k3s-pool",
+            "size": 53687091200,
+            "source": null,
+            "xml": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}

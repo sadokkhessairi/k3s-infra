@@ -157,7 +157,7 @@ resource "libvirt_domain" "worker" {
 }
 
 # ========================================
-# LOAD BALANCER (Optional for HA)
+# LOAD BALANCER 
 # ========================================
 
 # HAProxy/LB volume
@@ -184,8 +184,8 @@ resource "libvirt_cloudinit_disk" "lb" {
 resource "libvirt_domain" "lb" {
   count  = var.enable_load_balancer ? 1 : 0
   name   = "k3s-lb"
-  memory = 2048
-  vcpu   = 2
+  memory = 1024
+  vcpu   = 1
 
   cloudinit = libvirt_cloudinit_disk.lb[0].id
 
