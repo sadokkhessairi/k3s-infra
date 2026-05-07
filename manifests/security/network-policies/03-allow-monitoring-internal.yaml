@@ -10,11 +10,9 @@ spec:
   - Egress
   
   ingress:
-  # Allow all pods in monitoring namespace to receive traffic from each other
   - from:
     - podSelector: {}
   
   egress:
-  # Allow all pods in monitoring namespace to send traffic to each other
   - to:
     - podSelector: {}
