@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app-backend
+  namespace: app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-app-backend
+  template:
+    metadata:
+      labels:
+        app: test-app-backend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-creds
+      containers:
+        - name: backend
+          image: ghcr.io/sadokkhessairi/test-app-backend:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: sqlite:////data/sagemcom.db
+          volumeMounts:
+            - name: db-storage
+              mountPath: /data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: db-storage
+          persistentVolumeClaim:
+            claimName: test-app-db-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-app-db-pvc
+  namespace: app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi

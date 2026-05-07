@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sagemcom-ingress
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: default-strip-api@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: sagemcom.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: sagemcom-backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sagemcom-frontend
+                port:
+                  number: 80

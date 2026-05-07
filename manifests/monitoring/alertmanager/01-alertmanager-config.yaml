@@ -7,69 +7,36 @@ data:
   alertmanager.yml: |
     global:
       resolve_timeout: 5m
-      # SMTP configuration (configure if you want email alerts)
-      # smtp_smarthost: 'smtp.gmail.com:587'
-      # smtp_from: 'alerts@yourdomain.com'
-      # smtp_auth_username: 'your-email@gmail.com'
-      # smtp_auth_password: 'your-app-password'
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'ksadokk@gmail.com'
+      smtp_auth_username: 'ksadokk@gmail.com'
+      smtp_auth_password: 'pqusqvpzsdvwrdcy'
+      smtp_require_tls: true
 
-    # Templates for alert messages
-    templates:
-    - '/etc/alertmanager/template/*.tmpl'
-
-    # Route tree
     route:
       group_by: ['alertname', 'cluster', 'service']
       group_wait: 10s
       group_interval: 10s
       repeat_interval: 12h
-      receiver: 'default'
-      
+      receiver: 'gmail-notifications'
       routes:
-      # Critical alerts go to PagerDuty/Slack immediately
       - match:
           severity: critical
         receiver: 'critical'
-        group_wait: 10s
-        repeat_interval: 5m
-      
-      # Warning alerts can wait a bit longer
       - match:
           severity: warning
         receiver: 'warning'
-        group_wait: 30s
-        repeat_interval: 30m
 
-    # Receivers (notification endpoints)
     receivers:
-    - name: 'default'
-      # Log to console (for testing)
-      webhook_configs:
-      - url: 'http://localhost:5001/'
+    - name: 'gmail-notifications'
+      email_configs:
+      - to: 'ksadokk@gmail.com'
         send_resolved: true
-
     - name: 'critical'
-      # Add your critical alert destinations here
-      # Slack example:
-      # slack_configs:
-      # - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
-      #   channel: '#alerts-critical'
-      #   title: '{{ .GroupLabels.alertname }}'
-      #   text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
-
+      email_configs:
+      - to: 'ksadokk@gmail.com'
+        send_resolved: true
     - name: 'warning'
-      # Add your warning alert destinations here
-      # Email example:
-      # email_configs:
-      # - to: 'team@yourdomain.com'
-      #   headers:
-      #     Subject: 'Warning: {{ .GroupLabels.alertname }}'
-
-    # Inhibition rules (suppress alerts)
-    inhibit_rules:
-    # Suppress warnings if critical alert for same instance
-    - source_match:
-        severity: 'critical'
-      target_match:
-        severity: 'warning'
-      equal: ['instance', 'alertname']
+      email_configs:
+      - to: 'ksadokk@gmail.com'
+        send_resolved: true
