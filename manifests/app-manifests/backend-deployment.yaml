@@ -48,4 +48,4 @@ spec:
           persistentVolumeClaim:
             claimName: backend-sqlite-pvc
       imagePullSecrets:
-        - name: ghcr-secret
+        - name: ghcr-creds
