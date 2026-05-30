@@ -27,7 +27,7 @@ spec:
               mountPath: /data
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 15
