@@ -5,6 +5,9 @@ metadata:
   namespace: monitoring
   labels:
     app: vmalert
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8880"
 spec:
   ports:
   - port: 8880

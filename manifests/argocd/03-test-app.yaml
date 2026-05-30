@@ -9,15 +9,15 @@ spec:
   source:
     repoURL: https://github.com/sadokkhessairi/k3s-infra
     targetRevision: HEAD
-    path: manifests/app-manifests          # exact path inside your infra repo
+    path: manifests/app-manifests
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: app        # matches your namespace.yaml
+    namespace: app
 
   syncPolicy:
     automated:
-      prune: true                     # removes resources deleted from git
-      selfHeal: true                  # re-applies if someone manually changes something in the cluster
+      prune: true
+      selfHeal: true
     syncOptions:
-      - CreateNamespace=true          # creates machine-monitor namespace if it doesn't exist
+      - CreateNamespace=true

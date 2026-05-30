@@ -14,6 +14,9 @@ spec:
     metadata:
       labels:
         app: vmalert
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8880"
     spec:
       containers:
       - name: vmalert
@@ -25,6 +28,7 @@ spec:
           - -evaluationInterval=30s
           - -httpListenAddr=:8880
           - -external.url=http://vmalert:8880
+          - -remoteWrite.url=http://victoria-metrics:8428
         ports:
         - containerPort: 8880
           name: http

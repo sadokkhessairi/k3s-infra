@@ -130,10 +130,37 @@ data:
         target_label: service
 
     # ===================================
-    # Scrape VictoriaMetrics Itself
+    # Scrape Monitoring Stack via Pod IPs
     # ===================================
-    - job_name: 'victoria-metrics'
+    - job_name: 'monitoring-stack'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [monitoring]
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      # Only scrape pods running on this vmagent's node
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        action: keep
+        regex: $MY_NODE_NAME
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: app
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+    # ===================================
+    # Scrape Load Balancer (external node)
+    # ===================================
+    - job_name: 'k3s-lb'
       static_configs:
-      - targets: ['victoria-metrics.monitoring.svc:8428']
+      - targets: ['192.168.122.100:9100']
         labels:
-          app: victoria-metrics
+          node: k3s-lb
+          instance: k3s-lb
+          job: kubernetes-nodes
