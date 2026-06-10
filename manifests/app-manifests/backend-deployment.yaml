@@ -18,7 +18,7 @@ spec:
         node-role.kubernetes.io/worker: worker
       containers:
         - name: backend
-          image: ghcr.io/sadokkhessairi/test-app/backend:v3.4
+          image: ghcr.io/sadokkhessairi/test-app/backend:v4.0
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
